@@ -5,7 +5,6 @@ import { getUser } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { formatDateTime, formatCurrency } from '@/lib/utils';
@@ -15,29 +14,18 @@ type AllowanceStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
 
 interface Allowance {
   id: string;
-  type: string;
   amount: number;
-  description: string;
+  reason: string;
   status: AllowanceStatus;
   createdAt: string;
   approvedAt?: string;
   paidAt?: string;
-  rejectionReason?: string;
   requester?: { id: string; name: string; role: string };
 }
 
 interface AllowancesViewProps {
   isDirector?: boolean;
 }
-
-const ALLOWANCE_TYPES = [
-  { value: 'FUEL', label: 'Fuel Allowance' },
-  { value: 'ACCOMMODATION', label: 'Accommodation' },
-  { value: 'MEALS', label: 'Meals & Subsistence' },
-  { value: 'TRANSPORT', label: 'Transport' },
-  { value: 'COMMUNICATION', label: 'Communication' },
-  { value: 'OTHER', label: 'Other' },
-];
 
 const statusVariant: Record<AllowanceStatus, 'default' | 'warning' | 'success' | 'danger' | 'info'> = {
   PENDING: 'warning',
@@ -55,7 +43,7 @@ export function AllowancesView({ isDirector = false }: AllowancesViewProps) {
   const [rejectionReason, setRejectionReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ type: '', amount: '', description: '' });
+  const [form, setForm] = useState({ amount: '', reason: '' });
 
   useEffect(() => {
     loadData();
@@ -63,8 +51,7 @@ export function AllowancesView({ isDirector = false }: AllowancesViewProps) {
 
   async function loadData() {
     try {
-      const endpoint = isDirector ? '/allowances/all' : '/allowances/mine';
-      const data = await api.get<Allowance[]>(endpoint).catch(() => [] as Allowance[]);
+      const data = await api.get<Allowance[]>('/allowances').catch(() => [] as Allowance[]);
       setAllowances(data);
     } catch {}
   }
@@ -74,13 +61,12 @@ export function AllowancesView({ isDirector = false }: AllowancesViewProps) {
     setLoading(true);
     setError('');
     try {
-      await api.post('/allowances', {
-        type: form.type,
+      await api.post('/allowances/request', {
         amount: parseFloat(form.amount),
-        description: form.description,
+        reason: form.reason,
       });
       setShowModal(false);
-      setForm({ type: '', amount: '', description: '' });
+      setForm({ amount: '', reason: '' });
       loadData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to submit request');
@@ -150,20 +136,12 @@ export function AllowancesView({ isDirector = false }: AllowancesViewProps) {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-white font-medium">
-                          {ALLOWANCE_TYPES.find((t) => t.value === a.type)?.label ?? a.type}
-                        </span>
+                        <span className="text-white font-medium">{a.reason}</span>
                         <Badge variant={statusVariant[a.status]}>{a.status}</Badge>
                       </div>
                       {isDirector && a.requester && (
                         <p className="text-slate-400 text-xs mb-1">
                           Requested by: {a.requester.name} ({a.requester.role.replace('_', ' ')})
-                        </p>
-                      )}
-                      <p className="text-slate-300 text-sm">{a.description}</p>
-                      {a.rejectionReason && (
-                        <p className="text-red-400 text-xs mt-1">
-                          Reason: {a.rejectionReason}
                         </p>
                       )}
                       <p className="text-slate-500 text-xs mt-1">
@@ -224,13 +202,6 @@ export function AllowancesView({ isDirector = false }: AllowancesViewProps) {
           {error && (
             <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg">{error}</div>
           )}
-          <Select
-            label="Allowance Type"
-            options={ALLOWANCE_TYPES}
-            value={form.type}
-            onChange={(e) => setForm({ ...form, type: e.target.value })}
-            required
-          />
           <Input
             label="Amount (UGX)"
             type="number"
@@ -240,11 +211,11 @@ export function AllowancesView({ isDirector = false }: AllowancesViewProps) {
             required
           />
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-slate-300">Description / Justification</label>
+            <label className="text-sm font-medium text-slate-300">Reason / Justification</label>
             <textarea
               className="bg-navy-950/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 transition-colors min-h-[80px] resize-none"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
               placeholder="Explain the purpose and necessity of this allowance..."
               required
             />
