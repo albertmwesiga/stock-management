@@ -1,0 +1,294 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DRIVER
+  STOCK_MANAGER
+  SALES_MANAGER
+  DIRECTOR
+}
+
+enum JourneyStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum StockEntryType {
+  RECEIVED
+  RELEASED
+}
+
+enum AllowanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  BANK_TRANSFER
+  FUEL_CARD
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  journeys          Journey[]         @relation("DriverJourneys")
+  fuelRefills       FuelRefill[]      @relation("DriverRefills")
+  allowancesRequested AllowanceRequest[] @relation("RequesterAllowances")
+  allowancesApproved  AllowanceRequest[] @relation("ApproverAllowances")
+  stockEntries      StockEntry[]
+  salesRecords      SaleRecord[]
+  endOfDayReports   EndOfDayReport[]  @relation("PreparedByUser")
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+model Vehicle {
+  id                  String   @id @default(cuid())
+  plateNumber         String   @unique
+  make                String
+  model               String
+  tankCapacity        Float
+  currentMileage      Float    @default(0)
+  nextServiceMileage  Float
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  journeys        Journey[]
+  fuelRefills     FuelRefill[]
+  serviceRecords  ServiceRecord[]
+  mechanicalIssues MechanicalIssue[]
+  stockEntries    StockEntry[]
+  salesRecords    SaleRecord[]
+  endOfDayReports EndOfDayReport[]
+
+  @@map("vehicles")
+}
+
+model Journey {
+  id            String        @id @default(cuid())
+  vehicleId     String
+  driverId      String
+  startTime     DateTime
+  endTime       DateTime?
+  startMileage  Float
+  endMileage    Float?
+  status        JourneyStatus @default(ACTIVE)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  vehicle          Vehicle          @relation(fields: [vehicleId], references: [id])
+  driver           User             @relation("DriverJourneys", fields: [driverId], references: [id])
+  stops            JourneyStop[]
+  fuelRefills      FuelRefill[]
+  mechanicalIssues MechanicalIssue[]
+  stockEntries     StockEntry[]
+  salesRecords     SaleRecord[]
+  endOfDayReports  EndOfDayReport[]
+
+  @@map("journeys")
+}
+
+model JourneyStop {
+  id         String    @id @default(cuid())
+  journeyId  String
+  location   String
+  latitude   Float?
+  longitude  Float?
+  purpose    String
+  arrivedAt  DateTime
+  departedAt DateTime?
+  notes      String?
+
+  journey Journey @relation(fields: [journeyId], references: [id])
+
+  @@map("journey_stops")
+}
+
+model FuelRefill {
+  id              String        @id @default(cuid())
+  journeyId       String?
+  vehicleId       String
+  driverId        String
+  stationName     String
+  stationLocation String?
+  litres          Float
+  costPerLitre    Float
+  totalCost       Float
+  amountPaid      Float
+  paymentMethod   PaymentMethod @default(CASH)
+  receiptUrl      String?
+  timestamp       DateTime
+  createdAt       DateTime      @default(now())
+
+  journey Journey? @relation(fields: [journeyId], references: [id])
+  vehicle Vehicle  @relation(fields: [vehicleId], references: [id])
+  driver  User     @relation("DriverRefills", fields: [driverId], references: [id])
+
+  @@map("fuel_refills")
+}
+
+model ServiceRecord {
+  id                 String   @id @default(cuid())
+  vehicleId          String
+  mileageAtService   Float
+  nextServiceMileage Float
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+
+  @@map("service_records")
+}
+
+model MechanicalIssue {
+  id            String    @id @default(cuid())
+  vehicleId     String
+  journeyId     String?
+  description   String
+  mechanicName  String?
+  repairDetails String?
+  cost          Float?
+  receiptUrl    String?
+  reportedAt    DateTime
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  vehicle Vehicle  @relation(fields: [vehicleId], references: [id])
+  journey Journey? @relation(fields: [journeyId], references: [id])
+
+  @@map("mechanical_issues")
+}
+
+model StockType {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  unit         String
+  pricePerUnit Float
+  createdAt    DateTime @default(now())
+
+  stockEntries StockEntry[]
+  salesRecords SaleRecord[]
+
+  @@map("stock_types")
+}
+
+model StockEntry {
+  id          String         @id @default(cuid())
+  type        StockEntryType
+  vehicleId   String?
+  journeyId   String?
+  stockTypeId String
+  quantity    Float
+  weightKgs   Float?
+  location    String?
+  notes       String?
+  timestamp   DateTime
+  createdBy   String
+  createdAt   DateTime       @default(now())
+
+  vehicle   Vehicle?  @relation(fields: [vehicleId], references: [id])
+  journey   Journey?  @relation(fields: [journeyId], references: [id])
+  stockType StockType @relation(fields: [stockTypeId], references: [id])
+  creator   User      @relation(fields: [createdBy], references: [id])
+
+  @@map("stock_entries")
+}
+
+model SaleRecord {
+  id             String   @id @default(cuid())
+  vehicleId      String?
+  journeyId      String?
+  deliveryPoint  String
+  stockTypeId    String
+  quantity       Float
+  weightKgs      Float?
+  cashReceived   Float
+  timestamp      DateTime
+  salesManagerId String
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  vehicle      Vehicle?  @relation(fields: [vehicleId], references: [id])
+  journey      Journey?  @relation(fields: [journeyId], references: [id])
+  stockType    StockType @relation(fields: [stockTypeId], references: [id])
+  salesManager User      @relation(fields: [salesManagerId], references: [id])
+
+  @@map("sale_records")
+}
+
+model EndOfDayReport {
+  id                 String   @id @default(cuid())
+  vehicleId          String?
+  journeyId          String?
+  date               DateTime @db.Date
+  totalFuelCost      Float    @default(0)
+  totalMileage       Float    @default(0)
+  totalCashCollected Float    @default(0)
+  cashHandedOver     Float    @default(0)
+  handoverRecipient  String?
+  notes              String?
+  preparedBy         String
+  createdAt          DateTime @default(now())
+
+  vehicle  Vehicle? @relation(fields: [vehicleId], references: [id])
+  journey  Journey? @relation(fields: [journeyId], references: [id])
+  preparer User     @relation("PreparedByUser", fields: [preparedBy], references: [id])
+
+  @@map("end_of_day_reports")
+}
+
+model AllowanceRequest {
+  id          String          @id @default(cuid())
+  requesterId String
+  role        Role
+  amount      Float
+  reason      String
+  status      AllowanceStatus @default(PENDING)
+  approvedBy  String?
+  approvedAt  DateTime?
+  paidAt      DateTime?
+  receiptUrl  String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  requester User  @relation("RequesterAllowances", fields: [requesterId], references: [id])
+  approver  User? @relation("ApproverAllowances", fields: [approvedBy], references: [id])
+
+  @@map("allowance_requests")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  timestamp DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
