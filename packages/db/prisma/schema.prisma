@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DRIVER
+  STOCK_MANAGER
+  SALES_MANAGER
+  DIRECTOR
+}
+
+enum AllowanceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum StockEntryType {
+  RECEIVED
+  RELEASED
+}
+
+enum JourneyStatus {
+  ACTIVE
+  COMPLETED
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  password         String
+  name             String
+  role             Role
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  journeys         Journey[]
+  fuelRefills      FuelRefill[]
+  mechanicalIssues MechanicalIssue[]
+  allowances       Allowance[]       @relation("AllowanceRequester")
+  approvedAllowances Allowance[]     @relation("AllowanceApprover")
+  stockEntries     StockEntry[]
+  salesEntries     SalesEntry[]
+  dayHandovers     DayHandover[]
+  auditLogs        AuditLog[]
+}
+
+model Vehicle {
+  id               String            @id @default(cuid())
+  plate            String            @unique
+  name             String
+  tankCapacity     Float             @default(100)
+  currentMileage   Float             @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  journeys         Journey[]
+  stockEntries     StockEntry[]
+  salesEntries     SalesEntry[]
+  dayHandovers     DayHandover[]
+  mechanicalIssues MechanicalIssue[]
+  serviceRecords   ServiceRecord[]
+}
+
+model Journey {
+  id             String          @id @default(cuid())
+  vehicleId      String
+  driverId       String
+  status         JourneyStatus   @default(ACTIVE)
+  startMileage   Float
+  endMileage     Float?
+  startedAt      DateTime        @default(now())
+  endedAt        DateTime?
+  notes          String?
+  vehicle        Vehicle         @relation(fields: [vehicleId], references: [id])
+  driver         User            @relation(fields: [driverId], references: [id])
+  stops          JourneyStop[]
+  fuelRefills    FuelRefill[]
+}
+
+model JourneyStop {
+  id          String    @id @default(cuid())
+  journeyId   String
+  location    String
+  purpose     String
+  lat         Float?
+  lng         Float?
+  timestamp   DateTime  @default(now())
+  notes       String?
+  journey     Journey   @relation(fields: [journeyId], references: [id])
+}
+
+model FuelRefill {
+  id            String    @id @default(cuid())
+  journeyId     String
+  driverId      String
+  stationName   String
+  location      String
+  litres        Float
+  costPerLitre  Float?
+  totalCost     Float
+  amountPaid    Float
+  paymentMethod String    @default("cash")
+  receiptUrl    String?
+  timestamp     DateTime  @default(now())
+  journey       Journey   @relation(fields: [journeyId], references: [id])
+  driver        User      @relation(fields: [driverId], references: [id])
+}
+
+model ServiceRecord {
+  id                  String    @id @default(cuid())
+  vehicleId           String
+  mileageAtService    Float
+  nextServiceMileage  Float
+  notes               String?
+  createdAt           DateTime  @default(now())
+  vehicle             Vehicle   @relation(fields: [vehicleId], references: [id])
+}
+
+model MechanicalIssue {
+  id            String    @id @default(cuid())
+  vehicleId     String
+  reportedById  String
+  description   String
+  mechanicName  String?
+  repairDetails String?
+  cost          Float?
+  receiptUrl    String?
+  resolved      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id])
+  reportedBy    User      @relation(fields: [reportedById], references: [id])
+}
+
+model StockType {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  createdAt   DateTime      @default(now())
+  stockItems  StockItem[]
+  salesItems  SalesItem[]
+}
+
+model StockEntry {
+  id            String          @id @default(cuid())
+  vehicleId     String
+  type          StockEntryType
+  deliveryPoint String?
+  supplier      String?
+  notes         String?
+  createdById   String
+  createdAt     DateTime        @default(now())
+  vehicle       Vehicle         @relation(fields: [vehicleId], references: [id])
+  createdBy     User            @relation(fields: [createdById], references: [id])
+  items         StockItem[]
+}
+
+model StockItem {
+  id            String      @id @default(cuid())
+  stockEntryId  String
+  stockTypeId   String
+  pieces        Int
+  kgs           Float
+  stockEntry    StockEntry  @relation(fields: [stockEntryId], references: [id])
+  stockType     StockType   @relation(fields: [stockTypeId], references: [id])
+}
+
+model SalesEntry {
+  id              String      @id @default(cuid())
+  vehicleId       String
+  salesManagerId  String
+  deliveryPoint   String
+  cashReceived    Float
+  buyerName       String?
+  receiptUrl      String?
+  timestamp       DateTime    @default(now())
+  vehicle         Vehicle     @relation(fields: [vehicleId], references: [id])
+  salesManager    User        @relation(fields: [salesManagerId], references: [id])
+  items           SalesItem[]
+}
+
+model SalesItem {
+  id           String      @id @default(cuid())
+  salesEntryId String
+  stockTypeId  String
+  pieces       Int
+  kgs          Float
+  salesEntry   SalesEntry  @relation(fields: [salesEntryId], references: [id])
+  stockType    StockType   @relation(fields: [stockTypeId], references: [id])
+}
+
+model DayHandover {
+  id              String    @id @default(cuid())
+  vehicleId       String
+  salesManagerId  String
+  totalCash       Float
+  recipientName   String
+  notes           String?
+  handedOverAt    DateTime  @default(now())
+  vehicle         Vehicle   @relation(fields: [vehicleId], references: [id])
+  salesManager    User      @relation(fields: [salesManagerId], references: [id])
+}
+
+model Allowance {
+  id            String          @id @default(cuid())
+  requesterId   String
+  approverId    String?
+  amount        Float
+  reason        String
+  status        AllowanceStatus @default(PENDING)
+  receiptUrl    String?
+  requestedAt   DateTime        @default(now())
+  approvedAt    DateTime?
+  paidAt        DateTime?
+  notes         String?
+  requester     User            @relation("AllowanceRequester", fields: [requesterId], references: [id])
+  approver      User?           @relation("AllowanceApprover", fields: [approverId], references: [id])
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  timestamp DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+}
